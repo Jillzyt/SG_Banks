@@ -134,10 +134,8 @@ class SCCreditCardCsv(Bank):
             number = match.group()
         return number
         
-    def transform(self, row):
-        print(f"This is sc")
-        
-         # Split the line by comma
+    def transform(self, row):        
+        # Split the line by comma
         elements = row.split(',')
 
         # Check if the timestamp contains the current year or the last year
@@ -276,16 +274,15 @@ class UOBCsvBank(Bank):
         return False, ""
 
 
-class UOBCsv(Bank):
+class UOBCsvStatement(Bank):
     def __init__(self, year):
         super().__init__(year)
 
     def get_type():
-        return "UOB Csv statement"
+        return "UOB Csv Credit Card Statement"
     
     
     def transform(self, row):
-        print(f"This is uob")
         
          # Split the line by comma
         elements = row.split(',')
@@ -307,7 +304,104 @@ class UOBCsv(Bank):
         
         return False, ""
 
-class UOBPDFBank(Bank):
+class UOBPDFBankStatement(Bank):
+    def __init__(self, year):
+        super().__init__(year)
+    
+    def get_type():
+        return "UOB PDF Bank Statement"
+    
+    def parse(self, input_file):
+        self.parse_pdf_file(input_file)    
+    
+    def extract(self, parts):
+        final_array = []
+        for i in range(len(parts)):
+            line = parts[i].strip()
+            pattern = r"\d{2} [A-Za-z]{3}"
+            if (i + 2 < len(parts)):
+                try:
+                    if re.match(pattern, line):
+                        # Find the amount for the transaction
+                        print("found")
+                        j = i + 1
+                        amount_checked = False
+                        amountPattern = r'\b\d+\.\d+\b'
+                        while (not amount_checked):
+                            sus = parts[j].strip()
+                            if (j > i + 20):
+                                break
+                            if (re.match(amountPattern, sus)):
+                                amount_checked = True
+                                break
+                            else:
+                                j = j + 1
+                        
+                        if (amount_checked):
+                            # Append the next few lines until the amount
+                            next_lines = ','.join([parts[k].strip() for k in range(i, min(j+1, len(parts)))])
+                            final_array.append(next_lines)
+                            i = j 
+                except Exception as e:
+                    print(e)
+        
+        print(final_array)
+        return final_array
+                            
+    def find_amount(self, array):
+        # Define the pattern for matching amounts without the dollar sign
+        pattern = r'\b\d+\.\d+\b'
+        amount = None
+
+        for item in array:
+            matches = re.findall(pattern, item)
+            if matches:
+                amount = matches[0]
+                break  # Stop looping once the amount is found
+
+        return amount
+    
+    def find_date(self, array):
+        # Define the pattern for matching amounts without the dollar sign
+        pattern = r"\d{2} [A-Za-z]{3}"
+        date = None
+
+        for item in array:
+            matches = re.findall(pattern, item)
+            if matches:
+                date = matches[0]
+                break  # Stop looping once the amount is found
+
+        return date
+    
+    
+    def transform(self, row):
+        # Split the input string by commas
+        parts = row.split(',')
+
+        # Extract the first part (date)
+        date = parts[0].strip()
+
+        # Extract the last part (amount)
+        amount = parts[-1].strip()
+
+        # Extract the middle relevant parts and combine them
+        # Join all parts except the first and the last
+        middle_parts = [part.strip() for part in parts[1:-1] if part.strip()]
+        middle_combined = ' '.join(middle_parts)
+        
+        if "Funds Trf" in middle_combined or "Inward Credit-FAST" in middle_combined or "Bill Payment" in middle_combined or "Interest Credit" in middle_combined or "One Bonus Interest" in middle_combined:
+            return (False, "")
+
+        # Check if the timestamp contains the current year or the last year
+        month_year = convertDateToMonthUOBCsv(date,self.year)
+        category = get_category(middle_combined, amount)
+        message = f"{month_year},{amount},{category},UOB Bank"
+        return (True, message)
+
+#TODO: PDF bank UOB statement
+
+class UOBPDFCreditCardBank(Bank):
     def __init__(self, year):
         super().__init__(year)
     
@@ -397,6 +491,7 @@ class UOBPDFBank(Bank):
         message = f"{month_year},{price},{category},UOB Credit Card"
         return (True, message)
 
+
 # DBS bank
 class DBSPDFBank(Bank):
     def __init__(self, year):
@@ -404,7 +499,7 @@ class DBSPDFBank(Bank):
     
     
     def get_type():
-        return "DBS PDF bank statement"
+        return "DBS PDF Bank Statement"
     
     def extract(self):
         for i in range(len(self.parts)):
@@ -440,7 +535,7 @@ class OcbcCsv(Bank):
     
 
     def get_type():
-        return "OCBC Csv statement"
+        return "OCBC CSV Credit Card Statement"
     
     def transform(self, row):
         print(f"This is ocbc")
@@ -463,6 +558,7 @@ class OcbcCsv(Bank):
         
         return False, ""
 
+# HSBC Bank
 
 
 def get_category(description, cost):
@@ -519,6 +615,12 @@ def get_category(description, cost):
         return "Others"
     elif "uniqlo" in description:
         return "Others"
+    elif "PAYNOW-FAST" in description and cost < 100:
+        return "Food"
+    elif "NETS Debit-Consumer" in description and cost < 5:
+        return "Drink"
+    elif "NETS Debit-Consumer" in description and cost < 100:
+        return "Food"
     elif cost > 300:
         return "Others"
     else:
@@ -536,8 +638,6 @@ def convertDateToMonthUOBCsv(date_string):
     # Get month name from datetime object
     month_year = date_object.strftime("%m/%Y")
     return month_year
-
-
 
 def convertDateToMonthUOBCsv(date_string, year):
     date_object = datetime.strptime(date_string + " " + year, "%d %b %Y")

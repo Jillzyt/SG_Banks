@@ -36,7 +36,7 @@ class SGBankApp:
     
     def create_widgets(self):
         # Input CSV File
-        tk.Label(self.root, text="Input CSV File:").grid(row=0, column=0, padx=5, pady=5)
+        tk.Label(self.root, text="Input CSV/PDF File:").grid(row=0, column=0, padx=5, pady=5)
         tk.Entry(self.root, textvariable=self.input_file_path, width=50).grid(row=0, column=1, padx=5, pady=5)
         tk.Button(self.root, text="Browse", command=self.browse_input_file).grid(row=0, column=2, padx=5, pady=5)
 
